@@ -1,3 +1,4 @@
 requirements
 *.iml
 .idea
+rethinkdb_data
