@@ -9,7 +9,7 @@ import (
 )
 
 type User struct {
-	Id    string `json:"id,omitempty"`
+	Id    bson.ObjectId `json:"id"           bson:"_id"`
 	Email string
 }
 
@@ -129,6 +129,7 @@ func (u UserService) create(request *restful.Request, response *restful.Response
 				if err = usr.validate(); err != nil {
 					response.WriteError(http.StatusPreconditionFailed, err)
 				} else {
+					user.Id = bson.NewObjectId()
 					err = c.Insert(&user)
 					if err != nil {
 						response.WriteError(http.StatusInternalServerError, err)
