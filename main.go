@@ -1,47 +1,22 @@
 package main
 
 import (
-	r "github.com/christopherhesse/rethinkgo"
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful/swagger"
 	"log"
 	"net/http"
 )
 
+//TODO: Move to Mongo
+
 const APIKEYHEADER = "X-API-KEY"
-
-var sessionArray []*r.Session
-
-func initDb() {
-	session, err := r.Connect("localhost:28015", "taas")
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	err = r.DbCreate("taas").Run(session).Exec()
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = r.TableCreate("user").Run(session).Exec()
-	if err != nil {
-		log.Println(err)
-	}
-
-	err = r.TableCreate("pet").Run(session).Exec()
-	if err != nil {
-		log.Println(err)
-	}
-
-	sessionArray = append(sessionArray, session)
-}
+const DBSERVERNAME = "localhost"
+const DBNAME = "taas"
+const USERCOLLECTION = "user"
 
 func main() {
 
-	initDb()
-
-	u := UserService{DB{sessionArray[len(sessionArray)-1], "user"}}
+	u := UserService{}
 	u.Register()
 
 	config := swagger.Config{
