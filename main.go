@@ -8,6 +8,8 @@ import (
 	"net/http"
 )
 
+const APIKEYHEADER = "X-API-KEY"
+
 var sessionArray []*r.Session
 
 func initDb() {

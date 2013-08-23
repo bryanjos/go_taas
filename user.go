@@ -28,29 +28,25 @@ func (u UserService) Register() {
 	ws.
 		Path("/user").
 		Consumes(restful.MIME_XML, restful.MIME_JSON).
-		Produces(restful.MIME_JSON, restful.MIME_XML) // you can specify this per route as well
+		Produces(restful.MIME_JSON, restful.MIME_XML)
 
 	ws.Route(ws.GET("").To(u.find).
-		// docs
 		Doc("get a user").
 		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")).
-		Writes(User{})) // on the response
+		Writes(User{}))
 
 	ws.Route(ws.POST("").To(u.update).
-		// docs
 		Doc("update a user").
 		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")).
 		Param(ws.BodyParameter("User", "representation of a user").DataType("main.User")).
-		Reads(User{})) // from the request
+		Reads(User{}))
 
 	ws.Route(ws.PUT("").To(u.create).
-		// docs
 		Doc("create a user").
 		Param(ws.BodyParameter("User", "representation of a user").DataType("main.User")).
-		Reads(User{})) // from the request
+		Reads(User{}))
 
 	ws.Route(ws.DELETE("").To(u.remove).
-		// docs
 		Doc("delete a user").
 		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")))
 
@@ -58,12 +54,11 @@ func (u UserService) Register() {
 }
 
 func (u UserService) find(request *restful.Request, response *restful.Response) {
-	api_key := request.HeaderParameter("X-API-KEY")
+	api_key := request.HeaderParameter(APIKEYHEADER)
 
 	var user User
-	err := u.db.find("id", api_key, &user)
 
-	if err != nil {
+	if err := u.db.find("id", api_key, &user); err != nil {
 		response.WriteError(http.StatusNotFound, err)
 	} else {
 		response.WriteEntity(user)
@@ -74,18 +69,16 @@ func (u UserService) update(request *restful.Request, response *restful.Response
 	api_key := request.HeaderParameter("X-API-KEY")
 
 	usr := new(User)
-	err := request.ReadEntity(&usr)
-	if err == nil {
-		var user User
-		err = u.db.find("id", api_key, &user)
 
-		if err != nil {
+	if err := request.ReadEntity(&usr); err == nil {
+		var user User
+
+		if err = u.db.find("id", api_key, &user); err != nil {
 			response.WriteErrorString(http.StatusNotFound, "User Not Found")
 		} else {
 			user.Email = usr.Email
-			err = user.validate()
 
-			if err != nil {
+			if err = user.validate(); err != nil {
 				response.WriteError(http.StatusPreconditionFailed, err)
 			} else {
 				u.db.update(user)
@@ -100,15 +93,13 @@ func (u UserService) update(request *restful.Request, response *restful.Response
 
 func (u UserService) create(request *restful.Request, response *restful.Response) {
 	usr := new(User)
-	err := request.ReadEntity(&usr)
-	if err == nil {
+
+	if err := request.ReadEntity(&usr); err == nil {
 		var user User
-		err = u.db.find("Email", usr.Email, &user)
 
-		if err != nil {
-			err = usr.validate()
+		if err = u.db.find("Email", usr.Email, &user); err != nil {
 
-			if err != nil {
+			if err = usr.validate(); err != nil {
 				response.WriteError(http.StatusPreconditionFailed, err)
 			} else {
 				u.db.create(usr)
@@ -131,9 +122,8 @@ func (u UserService) remove(request *restful.Request, response *restful.Response
 	api_key := request.HeaderParameter("X-API-KEY")
 
 	var user User
-	err := u.db.find("id", api_key, &user)
 
-	if err != nil {
+	if err := u.db.find("id", api_key, &user); err != nil {
 		response.WriteErrorString(http.StatusNotFound, "User Not Found")
 	} else {
 		u.db.delete("id", api_key)
