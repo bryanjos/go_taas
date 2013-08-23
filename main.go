@@ -39,12 +39,12 @@ func main() {
 
 	initDb()
 
-	u := UserService{sessionArray[0]}
+	u := UserService{DB{sessionArray[len(sessionArray)-1], "user"}}
 	u.Register()
 
 	config := swagger.Config{
 		WebServices:    restful.RegisteredWebServices(), // you control what services are visible
-		WebServicesUrl: "http://localhost:8080",
+		WebServicesUrl: "http://localhost:5000",
 		ApiPath:        "/apidocs.json",
 
 		// Optionally, specifiy where the UI is located
@@ -54,7 +54,7 @@ func main() {
 
 	swagger.InstallSwaggerService(config)
 
-	log.Printf("start listening on localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Printf("start listening on localhost:5000")
+	log.Fatal(http.ListenAndServe(":5000", nil))
 
 }
