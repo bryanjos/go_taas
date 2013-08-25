@@ -5,16 +5,23 @@ import (
 	"github.com/emicklei/go-restful"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
-	"net/http"
+	"strings"
+	"time"
 )
 
 type User struct {
-	Id    bson.ObjectId `json:"id"           bson:"_id"`
+	Id      bson.ObjectId `json:"Id"           bson:"_id"`
+	Email   string
+	Created time.Time
+	Updated time.Time
+}
+
+type Email struct {
 	Email string
 }
 
-func (u User) validate() error {
-	if u.Email == "" {
+func (u Email) validate() error {
+	if u.Email == "" || strings.Contains(u.Email, "@") == false {
 		return errors.New("Invalid Email")
 	}
 
@@ -22,6 +29,7 @@ func (u User) validate() error {
 }
 
 type UserService struct {
+	errorHandler *ServiceErrorHandler
 }
 
 func (u UserService) Register() {
@@ -37,136 +45,160 @@ func (u UserService) Register() {
 		Writes(User{}))
 
 	ws.Route(ws.POST("").To(u.update).
-		Doc("update a user").
+		Doc("updates a user's email").
 		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")).
-		Param(ws.BodyParameter("User", "representation of a user").DataType("main.User")).
-		Reads(User{}))
+		Param(ws.BodyParameter("Email", "json with an email attribute").DataType("Email")).
+		Writes(User{}))
 
 	ws.Route(ws.PUT("").To(u.create).
 		Doc("create a user").
-		Param(ws.BodyParameter("User", "representation of a user").DataType("main.User")).
-		Reads(User{}))
+		Param(ws.BodyParameter("Email", "json with an email attribute").DataType("Email")).
+		Writes(User{}))
 
 	ws.Route(ws.DELETE("").To(u.remove).
 		Doc("delete a user").
-		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")))
+		Param(ws.HeaderParameter("X-API-KEY", "api key").DataType("string")).
+		Writes(""))
 
 	restful.Add(ws)
 }
 
 func (u UserService) find(request *restful.Request, response *restful.Response) {
-	session, err := mgo.Dial(DBSERVERNAME)
-	if err != nil {
-		response.WriteError(http.StatusInternalServerError, err)
-	} else {
-		defer session.Close()
-		c := session.DB(DBNAME).C(USERCOLLECTION)
-
-		api_key := request.HeaderParameter(APIKEYHEADER)
-
-		user := User{}
-
-		err = c.Find(bson.M{"id": api_key}).One(&user)
-		if err != nil {
-			response.WriteError(http.StatusNotFound, err)
-		} else {
-			response.WriteEntity(user)
-		}
+	if bson.IsObjectIdHex(request.HeaderParameter(APIKEYHEADER)) == false {
+		u.errorHandler.WriteInvalidAPIKeyError(response)
+		return
 	}
+
+	api_key := bson.ObjectIdHex(request.HeaderParameter(APIKEYHEADER))
+	session, err := mgo.Dial(DBSERVERNAME)
+
+	if err != nil {
+		u.errorHandler.WriteDatabaseConnectionError(response, err)
+		return
+	}
+
+	defer session.Close()
+	c := session.DB(DBNAME).C(USERCOLLECTION)
+
+	user := User{}
+
+	if err = c.FindId(api_key).One(&user); err != nil {
+		u.errorHandler.WriteNotFoundError(response, err)
+		return
+	}
+
+	response.WriteEntity(user)
 }
 
 func (u UserService) update(request *restful.Request, response *restful.Response) {
-	session, err := mgo.Dial(DBSERVERNAME)
-	if err != nil {
-		response.WriteError(http.StatusInternalServerError, err)
-	} else {
-		defer session.Close()
-		c := session.DB(DBNAME).C(USERCOLLECTION)
-		api_key := request.HeaderParameter(APIKEYHEADER)
-
-		usr := new(User)
-
-		if err := request.ReadEntity(&usr); err == nil {
-			user := User{}
-
-			if err = c.Find(bson.M{"id": api_key}).One(&user); err != nil {
-				response.WriteErrorString(http.StatusNotFound, "User Not Found")
-			} else {
-				user.Email = usr.Email
-
-				if err = user.validate(); err != nil {
-					response.WriteError(http.StatusPreconditionFailed, err)
-				} else {
-					err = c.Update(bson.M{"id": api_key}, &user)
-					if err != nil {
-						response.WriteError(http.StatusInternalServerError, err)
-					} else {
-						response.WriteErrorString(http.StatusOK, "OK")
-					}
-				}
-
-			}
-		} else {
-			response.WriteError(http.StatusInternalServerError, err)
-		}
+	if bson.IsObjectIdHex(request.HeaderParameter(APIKEYHEADER)) == false {
+		u.errorHandler.WriteInvalidAPIKeyError(response)
+		return
 	}
+
+	api_key := bson.ObjectIdHex(request.HeaderParameter(APIKEYHEADER))
+	session, err := mgo.Dial(DBSERVERNAME)
+
+	if err != nil {
+		u.errorHandler.WriteDatabaseConnectionError(response, err)
+		return
+	}
+
+	defer session.Close()
+	c := session.DB(DBNAME).C(USERCOLLECTION)
+
+	usr := new(Email)
+
+	if err := request.ReadEntity(&usr); err != nil {
+		u.errorHandler.WriteInputError(response, err)
+		return
+	}
+
+	if err = usr.validate(); err != nil {
+		u.errorHandler.WriteInvalidEmailError(response, err)
+		return
+	}
+
+	if count, _ := c.Find(bson.M{"email": usr.Email}).Count(); count > 0 {
+		u.errorHandler.WriteUniqueEmailError(response)
+		return
+	}
+
+	user := User{}
+	user.Email = usr.Email
+	user.Updated = time.Now()
+
+	if c.FindId(api_key).One(&user); err != nil {
+		u.errorHandler.WriteNotFoundError(response, err)
+		return
+	}
+
+	if err = c.UpdateId(api_key, &user); err != nil {
+		u.errorHandler.WriteUpdateError(response, err)
+		return
+	}
+
+	response.WriteEntity(user)
+
 }
 
 func (u UserService) create(request *restful.Request, response *restful.Response) {
 	session, err := mgo.Dial(DBSERVERNAME)
 	if err != nil {
-		response.WriteError(http.StatusInternalServerError, err)
-	} else {
-		defer session.Close()
-		c := session.DB(DBNAME).C(USERCOLLECTION)
-		usr := new(User)
-
-		if err := request.ReadEntity(&usr); err == nil {
-			user := User{}
-
-			if err = c.Find(bson.M{"Email": usr.Email}).One(&user); err != nil {
-
-				if err = usr.validate(); err != nil {
-					response.WriteError(http.StatusPreconditionFailed, err)
-				} else {
-					user.Id = bson.NewObjectId()
-					err = c.Insert(&user)
-					if err != nil {
-						response.WriteError(http.StatusInternalServerError, err)
-					} else {
-						_ = c.Find(bson.M{"Email": user.Email}).One(&user)
-						response.WriteEntity(user)
-					}
-				}
-			} else {
-				response.WriteErrorString(http.StatusPreconditionFailed, "Email Already In Use")
-			}
-		} else {
-			response.WriteError(http.StatusInternalServerError, err)
-		}
+		u.errorHandler.WriteDatabaseConnectionError(response, err)
+		return
 	}
+
+	defer session.Close()
+	c := session.DB(DBNAME).C(USERCOLLECTION)
+	usr := new(Email)
+
+	if err := request.ReadEntity(&usr); err != nil {
+		u.errorHandler.WriteInputError(response, err)
+		return
+	}
+
+	if count, _ := c.Find(bson.M{"email": usr.Email}).Count(); count > 0 {
+		u.errorHandler.WriteUniqueEmailError(response)
+		return
+	}
+
+	if err = usr.validate(); err != nil {
+		u.errorHandler.WriteInvalidEmailError(response, err)
+		return
+	}
+
+	user := User{bson.NewObjectId(), usr.Email, time.Now(), time.Now()}
+
+	if err = c.Insert(&user); err != nil {
+		u.errorHandler.WriteCreateError(response, err)
+		return
+	}
+
+	response.WriteEntity(user)
 }
 
 func (u UserService) remove(request *restful.Request, response *restful.Response) {
-	session, err := mgo.Dial(DBSERVERNAME)
-	if err != nil {
-		response.WriteError(http.StatusInternalServerError, err)
-	} else {
-		defer session.Close()
-		c := session.DB(DBNAME).C(USERCOLLECTION)
-		api_key := request.HeaderParameter(APIKEYHEADER)
-		user := User{}
-
-		if err := c.Find(bson.M{"id": api_key}).One(&user); err != nil {
-			response.WriteErrorString(http.StatusNotFound, "User Not Found")
-		} else {
-			err = c.Remove(bson.M{"id": api_key})
-			if err != nil {
-				response.WriteErrorString(http.StatusInternalServerError, "Error while deleting the user")
-			} else {
-				response.WriteErrorString(http.StatusOK, "")
-			}
-
-		}
+	if bson.IsObjectIdHex(request.HeaderParameter(APIKEYHEADER)) == false {
+		u.errorHandler.WriteInvalidAPIKeyError(response)
+		return
 	}
+
+	api_key := bson.ObjectIdHex(request.HeaderParameter(APIKEYHEADER))
+	session, err := mgo.Dial(DBSERVERNAME)
+
+	if err != nil {
+		u.errorHandler.WriteDatabaseConnectionError(response, err)
+		return
+	}
+
+	defer session.Close()
+	c := session.DB(DBNAME).C(USERCOLLECTION)
+
+	if err = c.RemoveId(api_key); err != nil {
+		u.errorHandler.WriteDeleteError(response, err)
+		return
+	}
+
+	response.WriteEntity("OK")
 }
