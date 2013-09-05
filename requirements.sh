@@ -1,4 +1,4 @@
-export GOPATH=$HOME/Projects/go_taas/requirements
+export GOPATH=$(pwd)
 export PATH=$PATH:$GOPATH/bin
 go get github.com/emicklei/go-restful
 go get github.com/emicklei/go-restful/swagger

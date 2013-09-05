@@ -1,3 +1,3 @@
-export GOPATH=$HOME/Projects/go_taas/requirements
+export GOPATH=$(pwd)
 export PATH=$PATH:$GOPATH/bin
 go run *.go
