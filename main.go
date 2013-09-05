@@ -7,8 +7,6 @@ import (
 	"net/http"
 )
 
-//TODO: Move to Mongo
-
 const APIKEYHEADER = "X-API-KEY"
 const PETKEYHEADER = "X-PET-KEY"
 const DBSERVERNAME = "localhost"
@@ -17,7 +15,7 @@ const USERCOLLECTION = "user"
 const PETCOLLECTION = "pet"
 
 func main() {
-	var log = logging.MustGetLogger(DBNAME)
+	log := logging.MustGetLogger(DBNAME)
 	logging.SetLevel(logging.INFO, DBNAME)
 
 	serviceErrorHandler := new(ServiceErrorHandler)
